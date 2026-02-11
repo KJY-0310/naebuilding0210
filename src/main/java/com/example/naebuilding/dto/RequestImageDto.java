@@ -1,4 +1,8 @@
 package com.example.naebuilding.dto;
 
-public class RequestImageDto {
-}
+public record RequestImageDto(
+        Long imageId,
+        String imageUrl,
+        Integer sortOrder
+) {}
+

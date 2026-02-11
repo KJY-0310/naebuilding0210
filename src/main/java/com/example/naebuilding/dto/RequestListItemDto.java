@@ -1,4 +1,14 @@
 package com.example.naebuilding.dto;
 
-public class RequestListItemDto {
-}
+import com.example.naebuilding.domain.RequestStatus;
+import java.time.LocalDateTime;
+
+public record RequestListItemDto(
+        Long requestId,
+        String title,
+        String category,
+        String location,
+        RequestStatus status,
+        String writerNickname,
+        LocalDateTime createdAt
+) {}

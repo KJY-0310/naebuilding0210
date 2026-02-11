@@ -1,4 +1,8 @@
 package com.example.naebuilding.dto;
 
-public class RequestStatusUpdateRequest {
-}
+import com.example.naebuilding.domain.RequestStatus;
+import jakarta.validation.constraints.NotNull;
+
+public record RequestStatusUpdateRequest(
+        @NotNull RequestStatus status
+) {}

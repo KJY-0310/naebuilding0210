@@ -1,4 +1,6 @@
 package com.example.naebuilding.dto.common;
 
-public class FieldErrorResponse {
-}
+public record FieldErrorResponse(
+        String field,
+        String message
+) {}
