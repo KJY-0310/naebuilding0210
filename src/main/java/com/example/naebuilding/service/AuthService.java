@@ -15,11 +15,11 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final EmailVerificationService emailVerificationService; // ✅ 추가
+    private final EmailVerificationService emailVerificationService;
 
     public SignupResponse signup(SignupRequest req) {
 
-        // ✅ 이메일 인증 완료 필수
+        // ✅ 이메일 인증 완료 필수 (서버 최종 검증)
         if (!emailVerificationService.isVerified(req.email())) {
             throw new IllegalArgumentException("이메일 인증이 필요합니다.");
         }

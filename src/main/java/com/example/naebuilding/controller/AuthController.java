@@ -6,7 +6,8 @@ import com.example.naebuilding.dto.auth.*;
 import com.example.naebuilding.dto.common.ApiResponse;
 import com.example.naebuilding.exception.NotFoundException;
 import com.example.naebuilding.repository.UserRepository;
-import com.example.naebuilding.service.AuthService;   // ✅ 추가
+import com.example.naebuilding.service.AuthService;
+import com.example.naebuilding.service.EmailVerificationService;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -16,9 +17,6 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import com.example.naebuilding.dto.auth.EmailSendRequest;
-import com.example.naebuilding.dto.auth.EmailVerifyRequest;
-import com.example.naebuilding.service.EmailVerificationService;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -32,18 +30,42 @@ public class AuthController {
     private final EmailVerificationService emailVerificationService;
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse<LoginResponse>> login(@RequestBody LoginRequest req, HttpServletResponse res) {
+    public ResponseEntity<ApiResponse<LoginResponse>> login(
+            @RequestBody LoginRequest req,
+            HttpServletResponse res
+    ) {
 
+        // 1) 아이디/비번 검증
         Authentication auth = authenticationManager.authenticate(
                 new UsernamePasswordAuthenticationToken(req.loginId(), req.password())
         );
 
+        // 2) 유저 조회
         UserEntity user = userRepository.findByLoginId(req.loginId())
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND"));
 
-        String access = jwtProvider.createAccessToken(user.getUserId(), user.getLoginId(), user.getRole().name());
+        // ✅ 3) 정지 계정 차단 (토큰 발급 전에 끊기)
+        if (!user.isActive()) {
+            // refresh 쿠키도 혹시 남아있으면 제거
+            ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
+                    .httpOnly(true)
+                    .secure(false)
+                    .path("/")
+                    .maxAge(0)
+                    .sameSite("Lax")
+                    .build();
+            res.addHeader("Set-Cookie", cookie.toString());
+
+            return ResponseEntity.status(401).body(ApiResponse.fail("USER_INACTIVE", null));
+        }
+
+        // 4) 토큰 발급
+        String access = jwtProvider.createAccessToken(
+                user.getUserId(), user.getLoginId(), user.getRole().name()
+        );
         String refresh = jwtProvider.createRefreshToken(user.getUserId());
 
+        // 5) refreshToken 쿠키 저장
         ResponseCookie cookie = ResponseCookie.from("refreshToken", refresh)
                 .httpOnly(true)
                 .secure(false)
@@ -58,31 +80,41 @@ public class AuthController {
 
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<RefreshResponse>> refresh(
-            @CookieValue(name = "refreshToken", required = false) String refreshToken
+            @CookieValue(name = "refreshToken", required = false) String refreshToken,
+            HttpServletResponse res
     ) {
         if (refreshToken == null) {
             return ResponseEntity.status(401).body(ApiResponse.fail("NO_REFRESH_TOKEN", null));
         }
 
-        Long userId = jwtProvider.getUserId(refreshToken);
+        Long userId;
+        try {
+            userId = jwtProvider.getUserId(refreshToken);
+        } catch (Exception e) {
+            // ✅ refreshToken 자체가 이상하면 쿠키 삭제 + 401
+            clearRefreshCookie(res);
+            return ResponseEntity.status(401).body(ApiResponse.fail("INVALID_REFRESH_TOKEN", null));
+        }
+
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new NotFoundException("USER_NOT_FOUND"));
 
-        String newAccess = jwtProvider.createAccessToken(user.getUserId(), user.getLoginId(), user.getRole().name());
+        // ✅ 정지 계정이면 refresh로도 재발급 불가
+        if (!user.isActive()) {
+            clearRefreshCookie(res);
+            return ResponseEntity.status(401).body(ApiResponse.fail("USER_INACTIVE", null));
+        }
+
+        String newAccess = jwtProvider.createAccessToken(
+                user.getUserId(), user.getLoginId(), user.getRole().name()
+        );
+
         return ResponseEntity.ok(ApiResponse.ok(new RefreshResponse(newAccess)));
     }
 
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(HttpServletResponse res) {
-        ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
-                .httpOnly(true)
-                .secure(false)
-                .path("/")
-                .maxAge(0)
-                .sameSite("Lax")
-                .build();
-        res.addHeader("Set-Cookie", cookie.toString());
-
+        clearRefreshCookie(res);
         return ResponseEntity.ok(ApiResponse.ok("LOGOUT", null));
     }
 
@@ -93,7 +125,7 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok("SIGNED_UP", out));
     }
 
-    //아이디 중복 체크
+    // 아이디 중복 체크
     @GetMapping("/check-loginId")
     public ResponseEntity<ApiResponse<Void>> checkLoginId(@RequestParam String loginId) {
         boolean exists = userRepository.existsByLoginId(loginId);
@@ -115,5 +147,14 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.ok("VERIFIED", null));
     }
 
-
+    private void clearRefreshCookie(HttpServletResponse res) {
+        ResponseCookie cookie = ResponseCookie.from("refreshToken", "")
+                .httpOnly(true)
+                .secure(false)
+                .path("/")
+                .maxAge(0)
+                .sameSite("Lax")
+                .build();
+        res.addHeader("Set-Cookie", cookie.toString());
+    }
 }

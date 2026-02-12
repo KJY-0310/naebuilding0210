@@ -54,6 +54,9 @@ public class UserEntity {
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
+    @Column(nullable = false)
+    private boolean active = true;
+
     // ✅ 편의 생성자(원하면 Builder로 바꿔도 됨)
     public UserEntity(String loginId, String password, String nickname, String email, Role role) {
         this.loginId = loginId;
@@ -61,5 +64,14 @@ public class UserEntity {
         this.nickname = nickname;
         this.email = email;
         this.role = role;
+    }
+
+    // UserEntity.java 내부에 추가
+    public void changeRole(Role role) {
+        this.role = role;
+    }
+
+    public void changeActive(boolean active) {
+        this.active = active;
     }
 }

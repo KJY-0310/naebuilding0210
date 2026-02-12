@@ -7,6 +7,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.*;
 import org.springframework.data.repository.query.Param;
+
 import java.util.List;
 
 public interface RequestRepository extends JpaRepository<RequestEntity, Long> {
@@ -39,7 +40,6 @@ public interface RequestRepository extends JpaRepository<RequestEntity, Long> {
             Pageable pageable
     );
 
-    // 기존 상세조회도 유지
     @Query("""
         SELECT r
         FROM RequestEntity r
@@ -49,9 +49,22 @@ public interface RequestRepository extends JpaRepository<RequestEntity, Long> {
     java.util.Optional<RequestEntity> findByIdWithWriter(@Param("requestId") Long requestId);
 
     @Query("""
-    SELECT DISTINCT r.category
-    FROM RequestEntity r
-    ORDER BY r.category ASC
-""")
+        SELECT DISTINCT r.category
+        FROM RequestEntity r
+        ORDER BY r.category ASC
+    """)
     List<String> findDistinctCategories();
+
+    // ✅ 상태별 개수 집계
+    @Query("select r.status as status, count(r) as cnt from RequestEntity r group by r.status")
+    List<Object[]> countGroupByStatus();
+
+    // ✅ 월별 민원 수 (MariaDB)
+    @Query(value = """
+        SELECT DATE_FORMAT(created_at, '%Y-%m') AS ym, COUNT(*) AS cnt
+        FROM requests
+        GROUP BY ym
+        ORDER BY ym
+    """, nativeQuery = true)
+    List<Object[]> countMonthly();
 }

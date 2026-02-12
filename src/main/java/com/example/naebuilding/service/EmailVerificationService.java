@@ -1,3 +1,4 @@
+// src/main/java/com/example/naebuilding/service/EmailVerificationService.java
 package com.example.naebuilding.service;
 
 import com.example.naebuilding.domain.EmailVerificationEntity;
@@ -44,7 +45,7 @@ public class EmailVerificationService {
     /**
      * ✅ 인증코드 발송(재발송 포함)
      * - DB(email unique) 구조에 맞게 upsert(있으면 update, 없으면 insert)
-     * - 쿨타임(30초) 강제
+     * - 쿨타임(30초) 강제 (updatedAt 우선, 없으면 createdAt)
      * - 실제 SMTP 발송(MimeMessage)
      */
     @Transactional
@@ -53,12 +54,15 @@ public class EmailVerificationService {
                 .findTopByEmailAndPurposeOrderByCreatedAtDesc(email, PURPOSE_SIGNUP)
                 .orElse(null);
 
-        // ✅ 재발송 쿨타임 체크(createdAt 기준)
-        if (rec != null && rec.getCreatedAt() != null) {
-            LocalDateTime cooldownEnd = rec.getCreatedAt().plusSeconds(RESEND_COOLDOWN_SECONDS);
-            if (LocalDateTime.now().isBefore(cooldownEnd)) {
-                long left = Duration.between(LocalDateTime.now(), cooldownEnd).getSeconds();
-                throw new IllegalArgumentException("인증코드 재발송은 " + left + "초 후에 가능합니다.");
+        // ✅ 재발송 쿨타임 체크 (updatedAt 기준, 없으면 createdAt fallback)
+        if (rec != null) {
+            LocalDateTime baseTime = rec.getUpdatedAt() != null ? rec.getUpdatedAt() : rec.getCreatedAt();
+            if (baseTime != null) {
+                LocalDateTime cooldownEnd = baseTime.plusSeconds(RESEND_COOLDOWN_SECONDS);
+                if (LocalDateTime.now().isBefore(cooldownEnd)) {
+                    long left = Duration.between(LocalDateTime.now(), cooldownEnd).getSeconds();
+                    throw new IllegalArgumentException("인증코드 재발송은 " + left + "초 후에 가능합니다.");
+                }
             }
         }
 
@@ -66,7 +70,7 @@ public class EmailVerificationService {
         String code = String.format("%0" + CODE_LEN + "d", random.nextInt(1_000_000));
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(EXPIRE_MINUTES);
 
-        // ✅ upsert(중복키 에러 방지)
+        // ✅ upsert
         if (rec == null) {
             rec = new EmailVerificationEntity(email, code, PURPOSE_SIGNUP, expiresAt, false);
         } else {

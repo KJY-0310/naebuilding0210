@@ -6,6 +6,7 @@ import com.example.naebuilding.dto.*;
 import com.example.naebuilding.dto.common.ApiResponse;
 import com.example.naebuilding.dto.common.PageResponse;
 import com.example.naebuilding.dto.request.RequestUpdateDto;
+import com.example.naebuilding.repository.RequestRepository;
 import com.example.naebuilding.service.FileStorageService;
 import com.example.naebuilding.service.RequestService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -22,8 +23,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.*;
 
 @Tag(name = "민원 API", description = "민원 CRUD 및 이미지 업로드/수정 기능")
 @RestController
@@ -35,6 +35,9 @@ public class RequestApiController {
     private final RequestService requestService;
     private final SecurityUtil securityUtil;
     private final ObjectMapper objectMapper;
+
+    // ✅ 추가: 상태별 카운트용
+    private final RequestRepository requestRepository;
 
     @Operation(summary = "민원 상세 조회", description = "공개 API. 민원 상세와 이미지 정보를 조회합니다.")
     @io.swagger.v3.oas.annotations.responses.ApiResponses({
@@ -69,6 +72,33 @@ public class RequestApiController {
     @GetMapping("/categories")
     public ResponseEntity<ApiResponse<List<String>>> categories() {
         return ResponseEntity.ok(ApiResponse.ok(requestService.getCategories()));
+    }
+
+    // ✅ 추가: 상태별 카운트 API (좌측 패널/대시보드용)
+    @Operation(summary = "상태별 민원 개수", description = "상태별 개수 및 TOTAL을 반환합니다.")
+    @GetMapping("/status-counts")
+    public ResponseEntity<ApiResponse<Map<String, Long>>> statusCounts() {
+        List<Object[]> rows = requestRepository.countGroupByStatus();
+
+        EnumMap<RequestStatus, Long> counts = new EnumMap<>(RequestStatus.class);
+        for (RequestStatus s : RequestStatus.values()) counts.put(s, 0L);
+
+        for (Object[] row : rows) {
+            RequestStatus s = (RequestStatus) row[0];
+            Long cnt = (Long) row[1];
+            counts.put(s, cnt);
+        }
+
+        long total = counts.values().stream().mapToLong(Long::longValue).sum();
+
+        Map<String, Long> out = new LinkedHashMap<>();
+        out.put("TOTAL", total);
+        out.put("RECEIVED", counts.get(RequestStatus.RECEIVED));
+        out.put("IN_PROGRESS", counts.get(RequestStatus.IN_PROGRESS));
+        out.put("COMPLETED", counts.get(RequestStatus.COMPLETED));
+        out.put("REJECTED", counts.get(RequestStatus.REJECTED));
+
+        return ResponseEntity.ok(ApiResponse.ok(out));
     }
 
     @Operation(
@@ -130,6 +160,4 @@ public class RequestApiController {
         RequestDetailDto updated = requestService.updateRequest(id, data, deleteImageIdsJson, images, loginUserId);
         return ResponseEntity.ok(ApiResponse.ok("UPDATED", updated));
     }
-
-
 }

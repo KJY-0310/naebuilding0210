@@ -1,9 +1,11 @@
+// src/main/java/com/example/naebuilding/domain/EmailVerificationEntity.java
 package com.example.naebuilding.domain;
 
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
 
@@ -41,6 +43,10 @@ public class EmailVerificationEntity {
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt;
 
     public EmailVerificationEntity(String email, String code, String purpose, LocalDateTime expiresAt, boolean verified) {
         this.email = email;

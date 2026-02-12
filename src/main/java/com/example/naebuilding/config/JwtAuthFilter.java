@@ -1,5 +1,7 @@
 package com.example.naebuilding.config;
 
+import com.example.naebuilding.domain.UserEntity;
+import com.example.naebuilding.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -12,14 +14,17 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Optional;
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
+    private final UserRepository userRepository;
 
-    public JwtAuthFilter(JwtProvider jwtProvider) {
+    public JwtAuthFilter(JwtProvider jwtProvider, UserRepository userRepository) {
         this.jwtProvider = jwtProvider;
+        this.userRepository = userRepository;
     }
 
     @Override
@@ -28,7 +33,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String uri = request.getRequestURI();
 
-        // ✅ 정적 파일/공개 경로는 JWT 필터에서 아예 제외 (가장 안전)
+        // ✅ 공개/정적 경로는 JWT 필터 제외
         if (uri.startsWith("/uploads/")
                 || uri.startsWith("/swagger-ui")
                 || uri.startsWith("/v3/api-docs")
@@ -52,7 +57,15 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 Long userId = jwtProvider.getUserId(token);
                 String role = jwtProvider.getRole(token);
 
-                // role이 null이면 그냥 통과 (권한 없음)
+                // ✅ 여기서 "정지 계정" 즉시 차단 (토큰 살아있어도 막힘)
+                Optional<UserEntity> userOpt = userRepository.findById(userId);
+                if (userOpt.isEmpty() || !userOpt.get().isActive()) {
+                    SecurityContextHolder.clearContext();
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    return;
+                }
+
+                // role이 null이면 그냥 통과
                 if (role != null) {
                     String authority = role.startsWith("ROLE_") ? role : "ROLE_" + role;
 
@@ -60,6 +73,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     var authentication = new UsernamePasswordAuthenticationToken(userId, null, authorities);
                     SecurityContextHolder.getContext().setAuthentication(authentication);
                 }
+
             } catch (Exception e) {
                 SecurityContextHolder.clearContext();
             }
