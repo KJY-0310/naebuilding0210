@@ -67,4 +67,7 @@ public interface RequestRepository extends JpaRepository<RequestEntity, Long> {
         ORDER BY ym
     """, nativeQuery = true)
     List<Object[]> countMonthly();
+
+    // ✅ 카테고리 사용 여부 체크
+    long countByCategory(String category);
 }

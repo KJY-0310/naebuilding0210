@@ -14,7 +14,6 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.List;
-import java.util.Optional;
 
 @Component
 public class JwtAuthFilter extends OncePerRequestFilter {
@@ -49,7 +48,6 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         }
 
         String auth = request.getHeader("Authorization");
-
         if (auth != null && auth.startsWith("Bearer ")) {
             String token = auth.substring(7);
 
@@ -57,22 +55,29 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 Long userId = jwtProvider.getUserId(token);
                 String role = jwtProvider.getRole(token);
 
-                // ✅ 여기서 "정지 계정" 즉시 차단 (토큰 살아있어도 막힘)
-                Optional<UserEntity> userOpt = userRepository.findById(userId);
-                if (userOpt.isEmpty() || !userOpt.get().isActive()) {
+                // 1) role 없으면 인증 불가
+                if (role == null) {
                     SecurityContextHolder.clearContext();
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
                     return;
                 }
 
-                // role이 null이면 그냥 통과
-                if (role != null) {
-                    String authority = role.startsWith("ROLE_") ? role : "ROLE_" + role;
-
-                    var authorities = List.of(new SimpleGrantedAuthority(authority));
-                    var authentication = new UsernamePasswordAuthenticationToken(userId, null, authorities);
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                // 2) 사용자 존재/active 체크
+                UserEntity user = userRepository.findById(userId).orElse(null);
+                if (user == null || !user.isActive()) {
+                    SecurityContextHolder.clearContext();
+                    response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                    return;
                 }
+
+                String authority = role.startsWith("ROLE_") ? role : "ROLE_" + role;
+                var authorities = List.of(new SimpleGrantedAuthority(authority));
+
+                // ✅ principal에 userId + loginId 같이 저장
+                var principal = new AuthPrincipal(userId, user.getLoginId());
+
+                var authentication = new UsernamePasswordAuthenticationToken(principal, null, authorities);
+                SecurityContextHolder.getContext().setAuthentication(authentication);
 
             } catch (Exception e) {
                 SecurityContextHolder.clearContext();

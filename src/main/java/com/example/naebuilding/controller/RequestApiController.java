@@ -36,14 +36,10 @@ public class RequestApiController {
     private final SecurityUtil securityUtil;
     private final ObjectMapper objectMapper;
 
-    // ✅ 추가: 상태별 카운트용
+    // ✅ 상태별 카운트용
     private final RequestRepository requestRepository;
 
     @Operation(summary = "민원 상세 조회", description = "공개 API. 민원 상세와 이미지 정보를 조회합니다.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "대상 없음")
-    })
     @GetMapping("/{id}")
     public ResponseEntity<ApiResponse<RequestDetailDto>> getDetail(@PathVariable Long id) {
         RequestDetailDto detail = requestService.getRequestDetail(id);
@@ -51,9 +47,6 @@ public class RequestApiController {
     }
 
     @Operation(summary = "민원 목록 조회", description = "공개 API. status/category/keyword + 페이징 조회를 지원합니다.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "성공")
-    })
     @GetMapping
     public ResponseEntity<ApiResponse<PageResponse<RequestListItemDto>>> list(
             @RequestParam(required = false) RequestStatus status,
@@ -65,16 +58,9 @@ public class RequestApiController {
         return ResponseEntity.ok(ApiResponse.ok(PageResponse.from(page)));
     }
 
-    @Operation(summary = "카테고리 목록 조회", description = "공개 API. 등록된 카테고리 목록을 반환합니다.")
-    @io.swagger.v3.oas.annotations.responses.ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "성공")
-    })
-    @GetMapping("/categories")
-    public ResponseEntity<ApiResponse<List<String>>> categories() {
-        return ResponseEntity.ok(ApiResponse.ok(requestService.getCategories()));
-    }
+    // ✅ (중요) 카테고리 목록 조회는 CategoryPublicController에서만 담당하도록 제거!
+    // @GetMapping("/categories")  <-- 이거 때문에 CategoryPublicController와 충돌했음
 
-    // ✅ 추가: 상태별 카운트 API (좌측 패널/대시보드용)
     @Operation(summary = "상태별 민원 개수", description = "상태별 개수 및 TOTAL을 반환합니다.")
     @GetMapping("/status-counts")
     public ResponseEntity<ApiResponse<Map<String, Long>>> statusCounts() {
@@ -110,10 +96,6 @@ public class RequestApiController {
                     """
     )
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
-    @io.swagger.v3.oas.annotations.responses.ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패")
-    })
     @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<Long>> create(
             @RequestPart("data") String dataJson,
@@ -141,12 +123,6 @@ public class RequestApiController {
                     """
     )
     @io.swagger.v3.oas.annotations.security.SecurityRequirement(name = "bearerAuth")
-    @io.swagger.v3.oas.annotations.responses.ApiResponses({
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "성공"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "401", description = "인증 실패"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "403", description = "작성자 아님"),
-            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "대상 없음")
-    })
     @PatchMapping(value = "/{id}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ApiResponse<RequestDetailDto>> updateRequest(
             @PathVariable Long id,
