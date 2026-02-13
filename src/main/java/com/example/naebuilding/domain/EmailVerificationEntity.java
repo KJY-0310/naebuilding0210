@@ -1,4 +1,3 @@
-// src/main/java/com/example/naebuilding/domain/EmailVerificationEntity.java
 package com.example.naebuilding.domain;
 
 import jakarta.persistence.*;

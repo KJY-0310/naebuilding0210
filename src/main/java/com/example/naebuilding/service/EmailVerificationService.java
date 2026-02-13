@@ -1,4 +1,3 @@
-// src/main/java/com/example/naebuilding/service/EmailVerificationService.java
 package com.example.naebuilding.service;
 
 import com.example.naebuilding.domain.EmailVerificationEntity;

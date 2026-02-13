@@ -1,5 +1,6 @@
 package com.example.naebuilding.service;
 
+import com.example.naebuilding.config.SecurityUtil;
 import com.example.naebuilding.domain.*;
 import com.example.naebuilding.dto.*;
 import com.example.naebuilding.dto.request.RequestUpdateDto;
@@ -7,14 +8,15 @@ import com.example.naebuilding.exception.NotFoundException;
 import com.example.naebuilding.repository.RequestImageRepository;
 import com.example.naebuilding.repository.RequestRepository;
 import com.example.naebuilding.repository.UserRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.List;
 
@@ -28,6 +30,10 @@ public class RequestService {
     private final UserRepository userRepository;
     private final FileStorageService fileStorageService;
     private final ObjectMapper objectMapper;
+
+    // ✅ 상태 변경 이력
+    private final RequestStatusHistoryService requestStatusHistoryService;
+    private final SecurityUtil securityUtil;
 
     // ✅ 민원 상세
     public RequestDetailDto getRequestDetail(Long requestId) {
@@ -51,13 +57,53 @@ public class RequestService {
         );
     }
 
-    // ✅ 상태 변경
+    // ✅ 상태 변경 + 이력 저장
     @Transactional
-    public void updateStatus(Long requestId, RequestStatus status) {
+    public void updateStatus(Long requestId, RequestStatus nextStatus, HttpServletRequest httpReq) {
         RequestEntity r = requestRepository.findById(requestId)
                 .orElseThrow(() -> new NotFoundException("민원을 찾을 수 없습니다. id=" + requestId));
 
-        r.changeStatus(status);
+        RequestStatus beforeStatus = r.getStatus();
+
+        // 상태가 같으면 아무것도 안함
+        if (beforeStatus == nextStatus) return;
+
+        // 1) 상태 변경
+        r.changeStatus(nextStatus);
+
+        // 2) actor
+        Long actorUserId = securityUtil.currentUserId();
+        String actorLoginId = securityUtil.currentLoginId();
+
+        // 3) ip/ua
+        String ip = extractClientIp(httpReq);
+        String ua = httpReq != null ? httpReq.getHeader("User-Agent") : null;
+
+        // 4) 기록 저장 (문자열은 enum.name()으로 고정)
+        requestStatusHistoryService.record(
+                r,
+                beforeStatus.name(),
+                nextStatus.name(),
+                actorUserId,
+                actorLoginId,
+                ip,
+                ua
+        );
+    }
+
+    // 프록시/리버스프록시 대비(없으면 remoteAddr)
+    private String extractClientIp(HttpServletRequest req) {
+        if (req == null) return null;
+
+        String xff = req.getHeader("X-Forwarded-For");
+        if (xff != null && !xff.isBlank()) {
+            return xff.split(",")[0].trim();
+        }
+
+        String xrip = req.getHeader("X-Real-IP");
+        if (xrip != null && !xrip.isBlank()) return xrip.trim();
+
+        return req.getRemoteAddr();
     }
 
     // ✅ 관리자 메모 수정
@@ -84,7 +130,7 @@ public class RequestService {
         return requestRepository.findDistinctCategories();
     }
 
-    // ✅ 민원 등록 + 이미지 저장 (multipart 업로드 결과 URL 저장)
+    // ✅ 민원 등록
     @Transactional
     public Long createRequest(Long loginUserId, RequestCreateRequest req, List<String> imageUrls) {
 
@@ -107,19 +153,18 @@ public class RequestService {
         return requestRepository.save(entity).getRequestId();
     }
 
-
     @Transactional
     public RequestDetailDto updateRequest(
             Long requestId,
             RequestUpdateDto dto,
             String deleteImageIdsJson,
             List<MultipartFile> newImages,
-            Long loginUserId // ✅ 추가
+            Long loginUserId
     ) {
-        RequestEntity request = requestRepository.findByIdWithWriter(requestId) // ✅ writer까지 fetch 추천
+        RequestEntity request = requestRepository.findByIdWithWriter(requestId)
                 .orElseThrow(() -> new NotFoundException("민원을 찾을 수 없습니다. id=" + requestId));
 
-        validateOwner(request, loginUserId); // ✅ 핵심 추가
+        validateOwner(request, loginUserId);
 
         request.update(dto.title(), dto.content(), dto.category(), dto.location());
 
@@ -132,12 +177,10 @@ public class RequestService {
                 throw new IllegalArgumentException("요청한 deleteImageIds가 현재 민원에 존재하지 않습니다.");
             }
 
-            // ✅ 파일 삭제는 서비스가 담당
             for (String url : removedUrls) {
                 fileStorageService.deleteByUrl(url);
             }
         }
-
 
         // 3) 추가
         if (newImages != null && !newImages.isEmpty()) {
@@ -149,12 +192,11 @@ public class RequestService {
             }
         }
 
-        // 4) 최신 상세 반환 (이미 너가 만든 방식 재사용)
         return getRequestDetail(requestId);
     }
 
     private void validateOwner(RequestEntity request, Long loginUserId) {
-        Long writerId = request.getWriter().getUserId(); // 너희 User PK명에 맞춰 유지
+        Long writerId = request.getWriter().getUserId();
         if (!writerId.equals(loginUserId)) {
             throw new org.springframework.security.access.AccessDeniedException("작성자만 수정/삭제할 수 있습니다.");
         }
@@ -168,7 +210,4 @@ public class RequestService {
             throw new IllegalArgumentException("deleteImageIds 형식이 올바르지 않습니다. 예: [1,2]");
         }
     }
-
-
-
 }

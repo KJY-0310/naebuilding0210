@@ -55,7 +55,9 @@ public class AdminLogService {
                         cb.like(cb.lower(root.get("message")), kw),
                         cb.like(cb.lower(root.get("targetType")), kw),
                         cb.like(cb.lower(root.get("action")), kw),
-                        cb.like(cb.lower(root.get("actorLoginId")), kw)
+                        cb.like(cb.lower(root.get("actorLoginId")), kw),
+                        cb.like(cb.lower(root.get("ip")), kw),
+                        cb.like(cb.lower(root.get("userAgent")), kw)
                 ));
             }
 
