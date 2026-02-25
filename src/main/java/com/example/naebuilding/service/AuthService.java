@@ -23,7 +23,6 @@ public class AuthService {
         if (!emailVerificationService.isVerified(req.email())) {
             throw new IllegalArgumentException("이메일 인증이 필요합니다.");
         }
-
         if (userRepository.existsByLoginId(req.loginId())) {
             throw new IllegalArgumentException("이미 사용 중인 아이디입니다.");
         }
@@ -39,7 +38,6 @@ public class AuthService {
         UserEntity saved = userRepository.save(
                 new UserEntity(req.loginId(), encoded, req.nickname(), req.email(), Role.USER)
         );
-
         return new SignupResponse(saved.getUserId(), saved.getLoginId(), saved.getNickname());
     }
 }

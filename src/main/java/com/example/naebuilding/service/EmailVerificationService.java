@@ -64,11 +64,9 @@ public class EmailVerificationService {
                 }
             }
         }
-
         // ✅ 코드 생성
         String code = String.format("%0" + CODE_LEN + "d", random.nextInt(1_000_000));
         LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(EXPIRE_MINUTES);
-
         // ✅ upsert
         if (rec == null) {
             rec = new EmailVerificationEntity(email, code, PURPOSE_SIGNUP, expiresAt, false);
@@ -76,7 +74,6 @@ public class EmailVerificationService {
             rec.updateCode(code, expiresAt);
         }
         emailVerificationRepository.save(rec);
-
         // ✅ 실제 메일 발송
         try {
             MimeMessage message = mailSender.createMimeMessage();
